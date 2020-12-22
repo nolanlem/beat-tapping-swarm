@@ -1,0 +1,1 @@
+import osdef makeDir(dirname):    if os.path.exists(dirname) == False:        if os.path.exists(os.path.split(dirname)[0]) == False:            print('making directory: ', os.path.split(dirname)[0])            os.mkdir(os.path.split(dirname)[0])        print('making directory: ', dirname)        os.mkdir(dirname)

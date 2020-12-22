@@ -114,7 +114,7 @@ def getKDE(events):
         tapblock_mx = np.mean(taps[blocks[j-1]:blocks[j]])
         block_mx = tapblock_mx*np.ones(blocksize)
         mx.extend(block_mx)
-     
+        
     gmx = gaussian_filter1d(mx, 1000)
     gmx = gmx/max(gmx)
     gmx -= 2 # move it down below wf amplitude space 
@@ -202,17 +202,19 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
             b_window = np.array(window)+ b
             events.extend(b_window)
             
-            R_m, _ = calculateCOP(window, period_samp, dist_type=dist_type)
+            R_m, _ = calculateCOP(window, period_samp/sr_audio, dist_type=dist_type)
             R_traj.append(R_m)
             
         events = np.array(events)
         events = events[events < totalsec] # remove events > 10 sec
         events = events[events > 0.0]  # remove events < 0 sec
         print('max in events', max(events))
-        
+
+        beatlocations = np.linspace(beg_delay, (1./tmp)*num_beats, num_beats)
+
         ax[i,0].hist(events, linewidth=0.3, bins=100) ## bins in a way mean what how rhythmic acuity is per second (we can cohere 30 events within a second)
-        ax[i,0].vlines(np.linspace(beg_delay, (1./tmp)*num_beats, num_beats), 0, 10, color='red', linewidth=0.5, alpha=0.5)
-        ax[i,0].plot(R_traj, linewidth=0.7)
+        beatlocations = np.linspace(beg_delay, (1./tmp)*num_beats, num_beats)
+        ax[i,0].vlines(beatlocations, 0, 10, color='red', linewidth=0.5, alpha=0.5)
         ax[i,0].set_title('SD=' + str(np.round(sd_,2)), fontsize=5)
         
         print('make audio')
@@ -223,7 +225,12 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
         ax[i,1].plot(mx, linewidth=0.7, color='orange')
         wf_mono = wf[0] + wf[1]
         ax[i,1].plot(wf_mono, linewidth=0.5)
-        ax[i,1].vlines(librosa.time_to_samples(np.linspace(beg_delay, (1./tmp)*num_beats, num_beats)), -2, 1, color='red', linewidth=0.5, alpha=0.5, zorder=1)  
+        beatlocs_samps = librosa.time_to_samples(beatlocations)
+        ax[i,1].vlines(beatlocs_samps, -2, 1, color='red', linewidth=0.5, alpha=0.5, zorder=1)  
+        ax[i,1].plot(beatlocs_samps, R_traj, linewidth=1, color='red')
+        R_mean = np.mean(R_traj)
+        ax[i,1].annotate(str(np.round(R_mean,2)), xy=(beatlocs_samps[-1],R_mean), color='red', fontsize=8)
+        
         i+=1
     # remove y-ticks on right col
     for ax_ in ax[:,1].flat:
