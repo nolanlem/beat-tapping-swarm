@@ -95,7 +95,7 @@ def makeAudio(events, iteration, stimdir, spatial_flag=False):
     audio_r = 0.8*audiobuffer_R/max(audiobuffer_R)
     
     audio = np.array([audio_l, audio_r])
-    audiofi = os.path.join(stimdir, dist_type[0] + '_' + binaural_str[0] + '_' + str(N) + '_' + str(np.round(iteration,2)) + '.wav')
+    audiofi = os.path.join(stimdir, dist_type[0] + '_' + binaural_str[0] + '_' + str(N) + '_' + str(iteration) + '.wav')
     sf.write(audiofi, audio.T, samplerate=sr_audio)
     print('creating', audiofi)
     return audio
@@ -155,7 +155,7 @@ else:
 target_tempos = np.geomspace(start=60, stop=100, num=5)
 freq_conds = target_tempos/60. # tempo to distribute events around
 period_conds = 1/freq_conds 
-num_beats = 5  # number of beats
+num_beats = 22  # number of beats
 seconds = (1./freq_conds)*num_beats   # length of audio to generate 
 beg_delay = 0.5 # time (secs) to insert in beginning of stim audio
 end_delay = 0.5 # time to insert at end fo audio
@@ -168,7 +168,7 @@ totalsecs = totalsamps/sr_audio
 stimdirs = []
 
 for tmp in target_tempos:
-    rootdir = os.path.join('stim-static/' + str(N) + '_' + binaural_str, str(int(tmp))) # hold R, or ramps?  
+    rootdir = os.path.join('stim-ramp/' + str(N) + '_' + binaural_str, str(int(tmp))) # hold R, or ramps?  
     stimdirs.append(rootdir)
     makeDir(rootdir)    # make dir for storing stims 
 
@@ -178,10 +178,20 @@ r = np.linspace(0.1, 1, num_grads)
 #brange = np.linspace(1, num_beats, num_beats)
 brange_secs = np.linspace(0.1, num_beats*1./freq, num_beats)
 
+slopes = []
+starting_vals = np.array([0.2, 0.3, 0.4, 0.5])
+ending_vals = np.array([0.1, 0.1, 0.125, 0.2])
+for sv, ev in zip(starting_vals, ending_vals):
+    slopes.append(np.linspace(sv, ev, num_beats))
+
+# piece meal slopes 
+# beg_slope = np.linspace(0.2, 0.4, 5)
+# mid_slope = np.linspace(0.4, 0.2, 5)
+
 ####### RANGE of Stand Dev for NORMAL dist. increments upon each iteration 
 #sd = np.linspace(0.001,1.0,10)
 num_grads = 8   # number of SD gradations for each tempo cond
-sd = np.linspace(0.1,0.35,num_grads)    # range of SDs to increment through to make stims
+#sd = np.linspace(0.35,0.35,num_grads)    # STARTING point of SDs to increment through to make stims
 removeAudioStims(stimdirs)
 
 
@@ -192,17 +202,17 @@ events, trigs = [], []
 plt.figure()
 for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, period_samps):
     
-    fig, ax = plt.subplots(nrows=num_grads, ncols=2, figsize=(5,num_grads), sharex='col', sharey='col')
+    fig, ax = plt.subplots(nrows=len(starting_vals), ncols=2, figsize=(5,len(starting_vals)), sharex='col', sharey='col')
     fig_r, ax_r = plt.subplots(1,1)
 
     brange_secs = np.linspace(beg_delay, num_beats*1./tmp, num_beats)    
     
     i = 0
-    for l_, r_, sd_ in zip(l,r,sd):
+    for slopetype in slopes:
         events, R_traj = [], []
-        for b in brange_secs:
+        for b, sd_inc in zip(brange_secs, slopetype):
             if dist_type == 'gaussian':
-                window = np.random.normal(0, sd_, size=N)
+                window = np.random.normal(0, sd_inc, size=N)
             if dist_type == 'uniform':
                 window = np.random.uniform(low=l_, high=r_, size=N)
             b_window = np.array(window)+ b
@@ -214,17 +224,17 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
         events = np.array(events)
         events = events[events < totalsec] # remove events > 10 sec
         events = events[events > 0.0]  # remove events < 0 sec
-        print('max in events', max(events))
 
         beatlocations = np.linspace(beg_delay, (1./tmp)*num_beats, num_beats)
 
         ax[i,0].hist(events, linewidth=0.3, bins=100) ## bins in a way mean what how rhythmic acuity is per second (we can cohere 30 events within a second)
         beatlocations = np.linspace(beg_delay, (1./tmp)*num_beats, num_beats)
         ax[i,0].vlines(beatlocations, 0, 10, color='red', linewidth=0.5, alpha=0.5)
-        ax[i,0].set_title('SD=' + str(round2dec(sd_)), fontsize=5)
+        ax[i,0].set_title('SD = ' + str(round2dec(slopetype[0])) + '->' + str(round2dec(slopetype[-1])), fontsize=5)
         
         print('make audio')
-        wf = makeAudio(events, sd_, stimdir, spatial_flag=binaural_flag)
+        slope_range = str(slopetype[0]) + '-' + str(slopetype[-1])
+        wf = makeAudio(events, slope_range, stimdir, spatial_flag=binaural_flag)
         print('get KDE')
         mx = getKDE(events)
         print('plotting..')
@@ -234,13 +244,15 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
         beatlocs_samps = librosa.time_to_samples(beatlocations)
         ax[i,1].vlines(beatlocs_samps, -2, 1, color='red', linewidth=0.5, alpha=0.5, zorder=1)  
         
-        ax[i,1].plot(beatlocs_samps, R_traj, linewidth=1, color='red')
-        R_mean = np.mean(R_traj)
-        ax[i,1].annotate(str(round2dec(R_mean)), xy=(beatlocs_samps[-1],R_mean), color='red', fontsize=8)
+        R_traj_sc = np.array(R_traj)*3 - 2  # scale R trajectory so that it covers over ylims of plot 
+        ax[i,1].plot(beatlocs_samps, R_traj_sc, linewidth=1, color='red')
+        ax[i,1].annotate(str(round2dec(R_traj[-1])), xy=(beatlocs_samps[-1],R_traj[-1]), fontsize=8)
+        ax[i,1].annotate(str(round2dec(R_traj[0])), xy=(beatlocs_samps[-1],R_traj[0]), fontsize=8)
 
         # R comparisons figure
         ax_r.plot(beatlocations, R_traj, linewidth=1)
-        ax_r.annotate(str(round2dec(R_mean)), xy=(beatlocations[-1], R_mean), color='red', fontsize=8)
+        ax_r.annotate(str(round2dec(R_traj[-1])), xy=(beatlocations[-1], R_traj[-1]), fontsize=8)
+        ax_r.annotate(str(round2dec(R_traj[0])), xy=(beatlocations[0], R_traj[0]), fontsize=8)
        
         i+=1
     ax_r.set_ylim([0,1])
@@ -248,7 +260,7 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
     fig_r.savefig(os.path.join(stimdir, 'R' + '_' + dist_type[0] + '_' + binaural_str[0] + '-' + str(N) + '-' + str(min(sd)) + '_' + str(max(sd))+ '.png'))
     # remove y-ticks on right col
     for ax_ in ax[:,1].flat:
-        ax_.set_yticks([])  
+        ax_.set_xticks([])  
     
     fig_r.suptitle(str(round2dec(60/(1/tmp))) + " Hz", fontsize=12)
     fig.suptitle(str(round2dec(60/(1/tmp))) + " Hz", fontsize=12)

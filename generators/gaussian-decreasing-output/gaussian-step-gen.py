@@ -16,9 +16,12 @@ from scipy.interpolate import interp1d
 os.chdir('/Users/nolanlem/Documents/kura/kura-git/swarm-tapping-study/generators')
 from util.utils import makeDir
 import seaborn as sns 
+from scipy.ndimage import gaussian_filter1d
+
 sns.set()
 sns.set_palette('tab10')
 
+sr_audio = 22050 
 # load mono metronome click, non-spatialized 
 thesample = './sampleaudio/woodblock_lower.wav'
 y, _ = librosa.load(thesample, sr=sr_audio)
@@ -95,7 +98,7 @@ def makeAudio(events, iteration, stimdir, spatial_flag=False):
     audio_r = 0.8*audiobuffer_R/max(audiobuffer_R)
     
     audio = np.array([audio_l, audio_r])
-    audiofi = os.path.join(stimdir, dist_type[0] + '_' + binaural_str[0] + '_' + str(N) + '_' + str(np.round(iteration,2)) + '.wav')
+    audiofi = os.path.join(stimdir, dist_type[0] + '_' + binaural_str[0] + '_' + str(N) + '_' + iteration + '.wav')
     sf.write(audiofi, audio.T, samplerate=sr_audio)
     print('creating', audiofi)
     return audio
@@ -133,6 +136,17 @@ def removeAudioStims(thestimdir):
 def round2dec(num2round):
     roundednum = np.round(num2round,2)
     return roundednum
+#%%
+
+    
+b, _ = np.histogram(events, bins=len(events))
+mx = []
+bsize = 10
+for j in range(bsize, len(events), bsize):
+    tb_mx = np.mean(b[(j-bsize):j])
+    block_mx = tb_mx*np.ones(bsize)
+    mx.extend(block_mx)
+plt.plot(mx)
 
 
 
@@ -155,7 +169,7 @@ else:
 target_tempos = np.geomspace(start=60, stop=100, num=5)
 freq_conds = target_tempos/60. # tempo to distribute events around
 period_conds = 1/freq_conds 
-num_beats = 5  # number of beats
+num_beats = 15  # number of beats
 seconds = (1./freq_conds)*num_beats   # length of audio to generate 
 beg_delay = 0.5 # time (secs) to insert in beginning of stim audio
 end_delay = 0.5 # time to insert at end fo audio
@@ -168,87 +182,179 @@ totalsecs = totalsamps/sr_audio
 stimdirs = []
 
 for tmp in target_tempos:
-    rootdir = os.path.join('stim-static/' + str(N) + '_' + binaural_str, str(int(tmp))) # hold R, or ramps?  
+    rootdir = os.path.join('stim-step/' + str(N) + '_' + binaural_str, str(int(tmp))) # hold R, or ramps?  
     stimdirs.append(rootdir)
     makeDir(rootdir)    # make dir for storing stims 
 
 ########## RANGE of UNIFORM low and high (l,r) range for uniform distribution
+num_grads = 8   # number of SD gradations for each tempo cond
+
 l = np.linspace(-0.1, -1, num_grads)
 r = np.linspace(0.1, 1, num_grads)
 #brange = np.linspace(1, num_beats, num_beats)
-brange_secs = np.linspace(0.1, num_beats*1./freq, num_beats)
+#brange_secs = np.linspace(0.1, 0.1 + num_beats*1./period_conds, num_beats)
 
 ####### RANGE of Stand Dev for NORMAL dist. increments upon each iteration 
 #sd = np.linspace(0.001,1.0,10)
-num_grads = 8   # number of SD gradations for each tempo cond
 sd = np.linspace(0.1,0.35,num_grads)    # range of SDs to increment through to make stims
+sd_start = 0.4                                  # starting SD, wide enough for no synchrony 
+sd_step_targets = np.linspace(0.1, 0.3, num_grads) # step targets to change SD to after starting_beats 
 removeAudioStims(stimdirs)
+#%%
+import scipy.stats as stats
 
+mu = 1
+variance = 0.4
+sigma = np.sqrt(variance)
+x = np.linspace(mu - 3*sigma, mu + 3*sigma, N)
+#plt.plot(x, stats.norm.pdf(x, mu, sigma))
+norm_pdf = stats.norm.pdf(x, mu, sigma)
+window = np.random.normal(1, 0.37, size=N)
+plt.hist(window, bins=20, density=True)
+plt.plot(x,norm_pdf)
+plt.show()
 
 #%%
+sigma = 0.4
+mu = 0
+window = np.random.normal(mu, sigma, size=N)
+count, bins, ignored = plt.hist(window, bins=30, density=True)
+pdfcont = 1/(sigma*np.sqrt(2*np.pi)) * np.exp(-(bins-mu)**2 / (2*sigma**2))
+plt.plot(bins, pdfcont, linewidth=2, color='r')
+
+#%%
+def returnSmoothPDF(window):
+    count, bins, ignored = plt.hist(window, bins=N)
+    pdfcont = 1/(sigma*np.sqrt(2*np.pi)) * np.exp(-(bins-mu)**2 / (2*sigma**2))
+    return pdfcont
+
+    
+#%% PLOT PDF of GAUSSIAN DISTRIBUTION AT STEP CHANGE 
+
+sd = np.linspace(0.1,0.35,num_grads)    # range of SDs to increment through to make stims
+sd_start = 0.4                               # starting SD, wide enough for no synchrony 
+sd_step_targets = np.linspace(0.1, 0.3, num_grads) # step targets to change SD to after starting_beats 
+
+mu = 0
+fig, ax = plt.subplots(nrows=(num_grads), ncols=1, figsize=(10,13), sharex=True, sharey=True)
+
+
+for n, sd_target in enumerate(sd_step_targets):
+    buffers = np.zeros((num_beats, int(brange_secs[-1]*N+N)))
+    trigs = np.zeros((num_beats,int(brange_secs[-1]*N+N)))
+    events, R_traj = [], []
+    
+    
+    startbeats = np.random.randint(low=3, high=6)   # number of beats to wait until to apply SD step change
+    sd_traj = [sd_start for elem in range(startbeats)] # fill up SD trajectory (per beat) with starting SDZ
+    sd_traj.extend([sd_target for elem in range(num_beats - startbeats)]) # fill up with SD target 
+
+    i = 0
+    for b, sd_ in zip(brange_secs, sd_traj):
+        x = np.linspace(mu - 3*sd_, mu + 3*sd_, N)
+        norm_pdf = stats.norm.pdf(x, mu, sd_)
+        loc = int(b*N)
+        buffers[i, loc:(loc+N)] = norm_pdf
+        
+        window = np.random.normal(0, sd_, size=N)
+        norm_vals = stats.norm.rvs(loc=mu, scale=sd_, size=N)      
+        #trigs[i, loc:(loc+N)] = N*(norm_vals + b)
+        trigsecs = norm_vals + b
+        events.extend(trigsecs)
+        i+=1
+    
+    events = np.array(events)
+    events_N = np.array(N*events, dtype=np.int)
+    minevents = int(np.abs(min(events_N[events_N<0])))
+    events_N = events_N + int(N/2)
+    #events_N = events_N[:int(brange_secs[-1]*N+N)]
+
+    for buffer, tr in zip(buffers, trigs):
+        ax[n].plot(buffer)
+    ax[n].vlines(events_N, -2, -1, linewidth=0.5, alpha=0.6)
+    ax[n].set_title('SD ' + str(round2dec(sd_traj[0])) + '->' + str(round2dec(sd_traj[-1])))
+
+    ymin, ymax = ax[n].get_ylim()
+    ax[n].vlines(int(brange_secs[1]*N + startbeats*N/2), 0, ymax, color='green', linestyle='--')
+
+plt.tight_layout()
+fig.suptitle('Audio Onset Events PDFs with step changes')    
+        
+        
+        
+
+#%%
+removeAudioStims(stimdirs)
 R_mag_traj, R_ang_traj, width_traj = [], [], []
 events, trigs = [], []
 
 plt.figure()
 for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, period_samps):
     
-    fig, ax = plt.subplots(nrows=num_grads, ncols=2, figsize=(5,num_grads), sharex='col', sharey='col')
+    fig, ax = plt.subplots(nrows=len(sd_step_targets), ncols=2, figsize=(10, 6), sharex='col', sharey='col')
     fig_r, ax_r = plt.subplots(1,1)
-
+        
     brange_secs = np.linspace(beg_delay, num_beats*1./tmp, num_beats)    
     
     i = 0
-    for l_, r_, sd_ in zip(l,r,sd):
+    for sd_target in sd_step_targets:
         events, R_traj = [], []
-        for b in brange_secs:
+        
+        startbeats = np.random.randint(low=3, high=6)   # number of beats to wait until to apply SD step change
+        sd_traj = [sd_start for elem in range(startbeats)] # fill up SD trajectory (per beat) with starting SDZ
+        sd_traj.extend([sd_target for elem in range(num_beats - startbeats)]) # fill up with SD target 
+        
+        # distribute gaussian window over beats 
+        for b, sd_ in zip(brange_secs, sd_traj):
             if dist_type == 'gaussian':
                 window = np.random.normal(0, sd_, size=N)
-            if dist_type == 'uniform':
-                window = np.random.uniform(low=l_, high=r_, size=N)
-            b_window = np.array(window)+ b
+            b_window = np.array(window)+ b # distribute prob events window around beats depending on tempo (in sec)
             events.extend(b_window)
             
             R_m, _ = calculateCOP(window, period_samp/sr_audio, dist_type=dist_type)
             R_traj.append(R_m)
             
         events = np.array(events)
-        events = events[events < totalsec] # remove events > 10 sec
+        events = events[events < totalsec] # remove events > max sec
         events = events[events > 0.0]  # remove events < 0 sec
-        print('max in events', max(events))
-
         beatlocations = np.linspace(beg_delay, (1./tmp)*num_beats, num_beats)
 
         ax[i,0].hist(events, linewidth=0.3, bins=100) ## bins in a way mean what how rhythmic acuity is per second (we can cohere 30 events within a second)
         beatlocations = np.linspace(beg_delay, (1./tmp)*num_beats, num_beats)
-        ax[i,0].vlines(beatlocations, 0, 10, color='red', linewidth=0.5, alpha=0.5)
-        ax[i,0].set_title('SD=' + str(round2dec(sd_)), fontsize=5)
+        ax[i,0].vlines(beatlocations, 0, 18, color='red', linewidth=0.5, alpha=0.5)
+        ax[i,0].vlines(startbeats, 0, 18, color='green', linewidth=1.5, linestyle='--') # beat where step happens
+        iteration_str = str(round2dec(sd_traj[0])) + '->' + str(round2dec(sd_traj[-1])) + '_' + str(startbeats)
+        ax[i,0].set_title('SD=' + iteration_str, fontsize=10)
         
-        print('make audio')
-        wf = makeAudio(events, sd_, stimdir, spatial_flag=binaural_flag)
+        print('making audio')
+        wf = makeAudio(events, iteration_str, stimdir, spatial_flag=binaural_flag)
         print('get KDE')
         mx = getKDE(events)
-        print('plotting..')
+        print('plotting KDE..')
         ax[i,1].plot(mx, linewidth=0.7, color='orange')
+        
         wf_mono = wf[0] + wf[1]
         ax[i,1].plot(wf_mono, linewidth=0.5)
         beatlocs_samps = librosa.time_to_samples(beatlocations)
-        ax[i,1].vlines(beatlocs_samps, -2, 1, color='red', linewidth=0.5, alpha=0.5, zorder=1)  
-        
+        ax[i,1].vlines(beatlocs_samps, -2, 1, color='red', linewidth=0.5, alpha=0.5, zorder=1)          
         ax[i,1].plot(beatlocs_samps, R_traj, linewidth=1, color='red')
-        R_mean = np.mean(R_traj)
-        ax[i,1].annotate(str(round2dec(R_mean)), xy=(beatlocs_samps[-1],R_mean), color='red', fontsize=8)
+        ax[i,1].vlines(int(startbeats*sr_audio), -2, 1, color='green', linewidth=1.5, linestyle='--') # beat where step happens
+        
+        #ax[i,1].annotate(str(round2dec(R_traj[-1])), xy=(beatlocs_samps[-1], R_traj[-1]), color='red', fontsize=8)
 
         # R comparisons figure
         ax_r.plot(beatlocations, R_traj, linewidth=1)
-        ax_r.annotate(str(round2dec(R_mean)), xy=(beatlocations[-1], R_mean), color='red', fontsize=8)
+        #ax_r.annotate(str(round2dec(R_mean)), xy=(beatlocations[-1], R_traj[-1]), color='red', fontsize=8)
        
         i+=1
     ax_r.set_ylim([0,1])
     ax_r.set_title(str(round2dec(60/(1/tmp))) + ' phase coherence magnitudes |R| Comparison')
-    fig_r.savefig(os.path.join(stimdir, 'R' + '_' + dist_type[0] + '_' + binaural_str[0] + '-' + str(N) + '-' + str(min(sd)) + '_' + str(max(sd))+ '.png'))
-    # remove y-ticks on right col
+    fig_r.savefig(os.path.join(stimdir, 'R' + '_' + dist_type[0] + '_' + binaural_str[0] + '-' + str(N) + '-' + iteration_str + '.png'))
+    # remove x-ticks on right col
     for ax_ in ax[:,1].flat:
-        ax_.set_yticks([])  
+        currxticks = ax_.get_xticks()
+        ax_.set_xticklabels(np.round(currxticks/sr_audio,1))
+        ax_.set_yticklabels([])
     
     fig_r.suptitle(str(round2dec(60/(1/tmp))) + " Hz", fontsize=12)
     fig.suptitle(str(round2dec(60/(1/tmp))) + " Hz", fontsize=12)
@@ -256,16 +362,18 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
     fig.tight_layout()
     #plt.savefig('./plots/inc-uniform-window.png', dpi=150)
     #plt.suptitle(dist_type + ' distribution: sd increments += ' + str(np.mean(np.diff(sd))))
-    fig.savefig(os.path.join(stimdir, dist_type[0] + '_' + binaural_str[0] + '-' + str(N) + '-' + str(min(sd)) + '_' + str(max(sd))+ '-sd.png'), dpi=150)
+    fig.savefig(os.path.join(stimdir, dist_type[0] + '_' + binaural_str[0] + '-' + str(N) + '-' + iteration_str + '.png'), dpi=150)
 
 
 
 #%%##################################################################
 ##### get Kernel Density Estimate based off of triggers and PLOT
 ###################################################################
-from scipy.ndimage import gaussian_filter1d
 
-
+plt.figure()
+fig, ax = plt.subplots(2,2)
+for ax_ in ax[:,1].flat:
+    
 
 
 
