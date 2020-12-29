@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#%%
 """
 Created on Thu Dec 10 15:56:32 2020
 
@@ -7,29 +8,49 @@ Created on Thu Dec 10 15:56:32 2020
 """
 
 import numpy as np 
+import scipy.stats as stats
 import matplotlib.pyplot as plt 
 import soundfile as sf
 import os
+import sys
 import librosa
 import glob
 from scipy.interpolate import interp1d
 os.chdir('/Users/nolanlem/Documents/kura/kura-git/swarm-tapping-study/generators')
-from util.utils import makeDir
 import seaborn as sns 
 from scipy.ndimage import gaussian_filter1d
+if '/Users/nolanlem/Documents/kura/kura-git/swarm-tapping-study/' not in sys.path:
+    sys.path.insert(0,'/Users/nolanlem/Documents/kura/kura-git/swarm-tapping-study/' )
+from utils.utils import makeDir, round2dec
+import config 
+
+#%%
+# have to put this in everytime you change config file 
+%reload_ext autoreload
+%autoreload 2
+
+#%%
 
 sns.set()
 sns.set_palette('tab10')
 
-sr_audio = 22050 
+sr_audio = config.sr_audio 
 # load mono metronome click, non-spatialized 
 thesample = './sampleaudio/woodblock_lower.wav'
-y, _ = librosa.load(thesample, sr=sr_audio)
+y, _ = librosa.load(thesample, sr=int(sr_audio))
 y = y*0.5 # reduce amp audiofile 
 
 ###### load binaural metronome clicks
 samples = []
-for fi in glob.glob('./sampleaudio/binaural-metros/*.wav'):
+binaural_metros_dir = './sampleaudio/binaural-metros/'
+binaural_metros_dir = '/Users/nolanlem/Documents/TEACHING/jupyter-nbs/conv-outputs-finland/'
+ir_flag = config.flags['ir']
+#############
+spatial_metros_dir = '/Users/nolanlem/Documents/TEACHING/jupyter-nbs/conv-outputs-finland/'
+###########
+
+# load audio (spatial or mono) into samples list 
+for fi in glob.glob(spatial_metros_dir + '*.wav'):
     y_, _ = librosa.load(fi, mono=False)
     samples.append(y_)
 
@@ -72,14 +93,14 @@ def calculateCOP(window, period_samps, dist_type = 'uniform'):
         
 
 def makeAudio(events, iteration, stimdir, spatial_flag=False):   
-    eventsinsamples = librosa.time_to_samples(events,sr=sr_audio)   
+    eventsinsamples = librosa.time_to_samples(events,sr=int(sr_audio))
     # audiobufffers for spatial and mono audio     
     audiobuffer_L = np.zeros(max(eventsinsamples) + largestsampnum)
     audiobuffer_R = np.zeros(max(eventsinsamples) + largestsampnum)    
     y_mono = y
     
     for startpos in eventsinsamples:
-        random_deg = np.random.randint(100)
+        random_deg = np.random.randint(N)
         y_l = samples[random_deg][0]
         y_r = samples[random_deg][1]
 
@@ -91,17 +112,46 @@ def makeAudio(events, iteration, stimdir, spatial_flag=False):
             audiobuffer_L[startpos:(startpos + len(y_mono))] = audiobuffer_L[startpos:(startpos + len(y_mono))] + y_mono
             audiobuffer_R[startpos:(startpos + len(y_mono))] = audiobuffer_R[startpos:(startpos + len(y_mono))] + y_mono
 
-    #audio_l = np.sum(audiobuffer_L, axis=0)
-    #audio_r = np.sum(audiobuffer_R, axis=0)
-    
     audio_l = 0.8*audiobuffer_L/max(audiobuffer_L)
     audio_r = 0.8*audiobuffer_R/max(audiobuffer_R)
     
     audio = np.array([audio_l, audio_r])
-    audiofi = os.path.join(stimdir, dist_type[0] + '_' + binaural_str[0] + '_' + str(N) + '_' + iteration + '.wav')
-    sf.write(audiofi, audio.T, samplerate=sr_audio)
+    audiofi = os.path.join(stimdir, config.dist_type + '_' + config.strs['quantize'] + '-' + str(config.qsteps) + '_' + config.strs['binaural'][0] + '_' + str(config.N) + '_' + iteration + '.wav')
+    sf.write(audiofi, audio.T, samplerate=int(sr_audio))
     print('creating', audiofi)
     return audio
+
+def makePulses(events, iteration, stimdir, spatial_flag=False):
+    eventsinsamples = librosa.time_to_samples(events,sr=int(sr_audio))
+    # audiobufffers for spatial and mono audio     
+    audiobuffer_L = np.zeros(max(eventsinsamples) + largestsampnum)
+    audiobuffer_R = np.zeros(max(eventsinsamples) + largestsampnum)    
+    y_mono = np.array([1])
+    
+    for startpos in eventsinsamples:
+        random_deg = np.random.randint(100)
+        y_l = np.array([1])
+        y_r = np.array([1])
+
+        if spatial_flag == True:
+            random_chan = np.random.randint(2)
+            if random_chan == 1:
+                audiobuffer_L[startpos:(startpos + len(y_l))] = audiobuffer_L[startpos:(startpos + len(y_l))] + y_l
+            else:
+                audiobuffer_R[startpos:(startpos + len(y_r))] = audiobuffer_R[startpos:(startpos + len(y_r))] + y_r
+        
+        if spatial_flag == False:
+            audiobuffer_L[startpos:(startpos + len(y_mono))] = audiobuffer_L[startpos:(startpos + len(y_mono))] + y_mono
+            audiobuffer_R[startpos:(startpos + len(y_mono))] = audiobuffer_R[startpos:(startpos + len(y_mono))] + y_mono
+
+    audio_l = 0.8*audiobuffer_L/max(audiobuffer_L)
+    audio_r = 0.8*audiobuffer_R/max(audiobuffer_R)
+    
+    audio = np.array([audio_l, audio_r])
+    audiofi = os.path.join(stimdir, config.dist_type + '_' + config.strs['quantize'] + '-' + str(config.qsteps) + '_' + config.strs['binaural'][0] + '_' + str(config.N) + '_' + iteration + '.wav')
+    sf.write(audiofi, audio.T, samplerate=int(sr_audio))
+    print('creating', audiofi)
+    return audio   
 
 def getKDE(events):
     eventsinsamples = librosa.time_to_samples(events)
@@ -132,38 +182,43 @@ def removeAudioStims(thestimdir):
             for png in glob.glob(folder + '/*.png'):
                 os.remove(png)
 
-# util function for
-def round2dec(num2round):
-    roundednum = np.round(num2round,2)
-    return roundednum
+def quantizeEvents(window, nsteps = 8):
+    #window = np.random.normal(0, 0.37, size=40)
+    #plt.plot(window)
+    qfunct = np.linspace(-1, 1, nsteps)
+    qidx = np.digitize(window, qfunct)
+    qwindow = [qfunct[idx-1] for idx in qidx]
+    #plt.plot(qwindow, color='orange')
+    return qwindow
 #%%
-
-    
-b, _ = np.histogram(events, bins=len(events))
-mx = []
-bsize = 10
-for j in range(bsize, len(events), bsize):
-    tb_mx = np.mean(b[(j-bsize):j])
-    block_mx = tb_mx*np.ones(bsize)
-    mx.extend(block_mx)
-plt.plot(mx)
+#region 
+print('here')
+#endregion
 
 
+#%%##################################################
+########## INITIALIZE GLOBAL PARAMS ################
+################################################
 
-#%%##########################################
-########## INITIALIZE GLOBAL PARAMS #########
-###########################################
-N = 40
-sr_model = 20
-sr_audio = 22050
+N = config.N
+sr_model = config.sr_model
 
 ####### set the binaural flag and DISTRIBUTION TYPE (uniform, gaussian) #######
-binaural_flag = True # binaural audio or no? 
-dist_type = 'gaussian'# which probability density function (uniform, or gaussian)
-if binaural_flag == True:
-    binaural_str = 'binaural'
-else:
-    binaural_str = 'mono'
+binaural_flag = config.flags['binaural'] # binaural audio or no? 
+ir_flag = config.flags['ir'] # use concert hall ir convolution as well? 
+pulse_flag = config.flags['pulse']
+quantize_flag = config.flags['quantize']
+qsteps = config.qsteps
+
+dist_type = config.dist_type # which probability density function (uniform, or gaussian)
+stimdirname = 'stim-step' + '-' + config.strs['quantize'] + '-' + config.strs['pulse'] + '-' + config.strs['binaural']
+
+print('------ intialization -------')
+print('distribution type', dist_type)
+print("binaural:", config.strs['binaural'])
+print('sample audio:', config.strs['pulse'])
+print('quantization:', config.strs['quantize'], 'num steps:', config.qsteps)
+print('audio stimuli dir:', stimdirname)
 
 #### LOOP PARAMS
 target_tempos = np.geomspace(start=60, stop=100, num=5)
@@ -179,15 +234,19 @@ totalsamps = beg_delay*sr_audio + seconds*sr_audio + end_delay*sr_audio
 totalsamps = totalsamps.astype(int)
 totalsecs = totalsamps/sr_audio
 
+## make the directories to hold the audio stim and plots
 stimdirs = []
-
 for tmp in target_tempos:
-    rootdir = os.path.join('stim-step/' + str(N) + '_' + binaural_str, str(int(tmp))) # hold R, or ramps?  
+    rootdir = os.path.join(stimdirname + '/' + str(config.N) + '_' + config.strs['binaural'] + '_' + config.strs['pulse'],  str(int(tmp)), 'q_' + str(config.qsteps)) # hold R, or ramps?  
     stimdirs.append(rootdir)
-    makeDir(rootdir)    # make dir for storing stims 
+    if os.path.exists(rootdir) == False:
+        print('making dirs for:', rootdir)
+        os.makedirs(rootdir)
+    else:
+        print(rootdir, 'already exists')
 
 ########## RANGE of UNIFORM low and high (l,r) range for uniform distribution
-num_grads = 8   # number of SD gradations for each tempo cond
+num_grads = 4   # number of SD gradations for each tempo cond
 
 l = np.linspace(-0.1, -1, num_grads)
 r = np.linspace(0.1, 1, num_grads)
@@ -200,8 +259,9 @@ sd = np.linspace(0.1,0.35,num_grads)    # range of SDs to increment through to m
 sd_start = 0.4                                  # starting SD, wide enough for no synchrony 
 sd_step_targets = np.linspace(0.1, 0.3, num_grads) # step targets to change SD to after starting_beats 
 removeAudioStims(stimdirs)
-#%%
-import scipy.stats as stats
+
+#region plot simple gaussian generator and function
+#%% plot simple gaussian generator and function 
 
 mu = 1
 variance = 0.4
@@ -214,23 +274,25 @@ plt.hist(window, bins=20, density=True)
 plt.plot(x,norm_pdf)
 plt.show()
 
-#%%
-sigma = 0.4
-mu = 0
-window = np.random.normal(mu, sigma, size=N)
-count, bins, ignored = plt.hist(window, bins=30, density=True)
-pdfcont = 1/(sigma*np.sqrt(2*np.pi)) * np.exp(-(bins-mu)**2 / (2*sigma**2))
-plt.plot(bins, pdfcont, linewidth=2, color='r')
+# another way to do it 
+# sigma = 0.4
+# mu = 0
+# window = np.random.normal(mu, sigma, size=N)
+# count, bins, ignored = plt.hist(window, bins=30, density=True)
+# pdfcont = 1/(sigma*np.sqrt(2*np.pi)) * np.exp(-(bins-mu)**2 / (2*sigma**2))
+# plt.plot(bins, pdfcont, linewidth=2, color='r')
 
-#%%
-def returnSmoothPDF(window):
-    count, bins, ignored = plt.hist(window, bins=N)
-    pdfcont = 1/(sigma*np.sqrt(2*np.pi)) * np.exp(-(bins-mu)**2 / (2*sigma**2))
-    return pdfcont
+#endregion
 
-    
-#%% PLOT PDF of GAUSSIAN DISTRIBUTION AT STEP CHANGE 
 
+#region PLOT PDF OF GAUSSIAN DISTRIBUTION AT STEP CHANGE
+##%% NB: don't have to run .......
+# ################################################################################
+################PLOT PDF of GAUSSIAN DISTRIBUTION AT STEP CHANGE 
+##########################################################################
+
+freq = 1
+brange_secs = np.linspace(beg_delay, num_beats*1./freq, num_beats)    
 sd = np.linspace(0.1,0.35,num_grads)    # range of SDs to increment through to make stims
 sd_start = 0.4                               # starting SD, wide enough for no synchrony 
 sd_step_targets = np.linspace(0.1, 0.3, num_grads) # step targets to change SD to after starting_beats 
@@ -238,6 +300,7 @@ sd_step_targets = np.linspace(0.1, 0.3, num_grads) # step targets to change SD t
 mu = 0
 fig, ax = plt.subplots(nrows=(num_grads), ncols=1, figsize=(10,13), sharex=True, sharey=True)
 
+len(sd_target)
 
 for n, sd_target in enumerate(sd_step_targets):
     buffers = np.zeros((num_beats, int(brange_secs[-1]*N+N)))
@@ -280,16 +343,17 @@ for n, sd_target in enumerate(sd_step_targets):
 plt.tight_layout()
 fig.suptitle('Audio Onset Events PDFs with step changes')    
         
-        
-        
+#endregion       
 
-#%%
+#%% ######################################################################
+# ############# GENERATE AUDIO STIMULI SD STEPS AT RANDOM STEP ###########
+##########################################################################
 removeAudioStims(stimdirs)
 R_mag_traj, R_ang_traj, width_traj = [], [], []
-events, trigs = [], []
+events, trigs = [], []  
 
 plt.figure()
-for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, period_samps):
+for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, np.array(period_samps, dtype=np.float)):
     
     fig, ax = plt.subplots(nrows=len(sd_step_targets), ncols=2, figsize=(10, 6), sharex='col', sharey='col')
     fig_r, ax_r = plt.subplots(1,1)
@@ -308,15 +372,19 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
         for b, sd_ in zip(brange_secs, sd_traj):
             if dist_type == 'gaussian':
                 window = np.random.normal(0, sd_, size=N)
-            b_window = np.array(window)+ b # distribute prob events window around beats depending on tempo (in sec)
+            if quantize_flag == True:
+                window = quantizeEvents(window, nsteps=qsteps)
+            
+            b_window = np.array(window)+ b # distribute prob events window around beats depending on tempo (in sec)            
             events.extend(b_window)
             
             R_m, _ = calculateCOP(window, period_samp/sr_audio, dist_type=dist_type)
             R_traj.append(R_m)
-            
+        #print('R_traj:', R_traj)  
         events = np.array(events)
         events = events[events < totalsec] # remove events > max sec
         events = events[events > 0.0]  # remove events < 0 sec
+            
         beatlocations = np.linspace(beg_delay, (1./tmp)*num_beats, num_beats)
 
         ax[i,0].hist(events, linewidth=0.3, bins=100) ## bins in a way mean what how rhythmic acuity is per second (we can cohere 30 events within a second)
@@ -326,8 +394,11 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
         iteration_str = str(round2dec(sd_traj[0])) + '->' + str(round2dec(sd_traj[-1])) + '_' + str(startbeats)
         ax[i,0].set_title('SD=' + iteration_str, fontsize=10)
         
-        print('making audio')
-        wf = makeAudio(events, iteration_str, stimdir, spatial_flag=binaural_flag)
+        print('making', config.strs['pulse'], 'audio')
+        if pulse_flag == False:
+            wf = makeAudio(events, iteration_str, stimdir, spatial_flag=config.flags['binaural'])
+        else:
+            wf = makePulses(events, iteration_str, stimdir, spatial_flag=config.flags['binaural'])
         print('get KDE')
         mx = getKDE(events)
         print('plotting KDE..')
@@ -349,7 +420,7 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
         i+=1
     ax_r.set_ylim([0,1])
     ax_r.set_title(str(round2dec(60/(1/tmp))) + ' phase coherence magnitudes |R| Comparison')
-    fig_r.savefig(os.path.join(stimdir, 'R' + '_' + dist_type[0] + '_' + binaural_str[0] + '-' + str(N) + '-' + iteration_str + '.png'))
+    fig_r.savefig(os.path.join(stimdir, 'R' + '_' + config.dist_type + '_' + config.strs['binaural'][0] + '-' + str(config.N) + '-' + iteration_str + '.png'))
     # remove x-ticks on right col
     for ax_ in ax[:,1].flat:
         currxticks = ax_.get_xticks()
@@ -362,9 +433,13 @@ for tmp, stimdir, totalsec, period_samp in zip(freq_conds, stimdirs, totalsecs, 
     fig.tight_layout()
     #plt.savefig('./plots/inc-uniform-window.png', dpi=150)
     #plt.suptitle(dist_type + ' distribution: sd increments += ' + str(np.mean(np.diff(sd))))
-    fig.savefig(os.path.join(stimdir, dist_type[0] + '_' + binaural_str[0] + '-' + str(N) + '-' + iteration_str + '.png'), dpi=150)
+    fig.savefig(os.path.join(stimdir, config.dist_type + '_' + config.strs['binaural'][0] + '-' + str(config.N) + '-' + iteration_str + '.png'), dpi=150)
 
 
+
+# %%
+
+# %%
 
 #%%##################################################################
 ##### get Kernel Density Estimate based off of triggers and PLOT
