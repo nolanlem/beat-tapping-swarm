@@ -61,6 +61,7 @@ for deg in range(len(samples)):
     if maxnum > tmpmax:
         tmpmax = maxnum
 largestsampnum = tmpmax
+ 
 
 # PER STIMULUS TIME HISTORGRAM 
 def PSTH(x, N, len_y):
@@ -192,7 +193,6 @@ def quantizeEvents(window, nsteps = 8):
     return qwindow
 #%%
 #region 
-print('here')
 #endregion
 
 
@@ -300,7 +300,7 @@ sd_step_targets = np.linspace(0.1, 0.3, num_grads) # step targets to change SD t
 mu = 0
 fig, ax = plt.subplots(nrows=(num_grads), ncols=1, figsize=(10,13), sharex=True, sharey=True)
 
-len(sd_target)
+#len(sd_target)
 
 for n, sd_target in enumerate(sd_step_targets):
     buffers = np.zeros((num_beats, int(brange_secs[-1]*N+N)))

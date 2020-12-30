@@ -14,7 +14,7 @@ import librosa
 import glob
 from scipy.interpolate import interp1d
 os.chdir('/Users/nolanlem/Documents/kura/kura-git/swarm-tapping-study/generators')
-from util.utils import makeDir
+#from util.utils import makeDir
 import seaborn as sns 
 sns.set()
 sns.set_palette('tab10')

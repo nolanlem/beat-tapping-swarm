@@ -34,7 +34,7 @@ import csv
 
 import seaborn as sns
 sns.set()
-os.chdir('/Users/nolanlem/Documents/kura/kura-new-cond/py/psychopy/swarm-tapping-study/')
+os.chdir('/Users/nolanlem/Documents/kura/kura-new-cond/py/psychopy/swarm-tapping-study/analysis-scripts')
 
 
 sr=22050
@@ -149,36 +149,20 @@ def impute_mx(csv_file):
 ##################################################################################################
 
 # dictionaries for center periods, beat bins, etc. from generative model (already generated) 
-idealperiods, sndbeatbins, centerbpms, centerperiods = {},{},{},{}
+sr_audio = 22050.
+sndbeatbins, centerbpms, centerperiods = {},{},{}
 
 # load beatbins for no-timbre type
-datadirs = ['../../stim-no-timbre-5', '../../stim-timbre-5']
-timbre_tags = ['n','t']
-stimuli_dirs = ['stimuli_1', 'stimuli_2', 'stimuli_3', 'stimuli_4']
 #beatbins_dir = os.path.join(datadir, stimuli_dir, 'phases', 'beat-windows')
 #centerbpms_dir = os.path.join(datadir, stimuli_dir, 'phases', 'center-bpm')
 
 
-for datadir, ttag in zip(datadirs, timbre_tags):
-    for stimuli_dir in stimuli_dirs:
-        beatbins_dir = os.path.join(datadir, stimuli_dir, 'phases', 'beat-windows')
-        for fi in glob.glob(beatbins_dir + '/*.txt'):
-            fi_basename = str.split(os.path.basename(fi), '.')[0] # --> weak_79_1
-            f = str.split(fi_basename, '_') 
-            sync_cond = "_".join([f[0], ttag, f[1], f[2]])
-            thebeatbins = np.loadtxt(fi, delimiter='\n')
-            sndbeatbins[sync_cond] = thebeatbins
-        
-        centerbpms_dir = os.path.join(datadir, stimuli_dir, 'phases', 'center-bpm')    
-        for fi in glob.glob(centerbpms_dir + '/*.txt'):       
-            fi_basename = str.split(os.path.basename(fi), '.')[0] # --> weak_79_1
-            f = str.split(fi_basename, '_') 
-            sync_cond = "_".join([f[0], ttag, f[1], f[2]])    
-            thecenterbpm = np.loadtxt(fi)        
-            centerbpms[sync_cond] = float(thecenterbpm)
-            centerperiods[sync_cond] = 60./float(thecenterbpm)
-            
-
+for fi in glob.glob('bb-old-exp/*.npy'):
+    sync_cond = str.split(os.path.basename(fi), '.')[0] # --> weak_79_1
+    sndbeatbins[sync_cond] = np.load(fi)/sr_audio
+    centerperiods[sync_cond] = np.mean(np.diff(sndbeatbins[sync_cond]))
+    centerbpms[sync_cond] = 60./np.mean(np.diff(sndbeatbins[sync_cond]))
+    
 #%% ######### parse subject taps in csv output files and format into dataframes or arrays
 
 # default dictionarya
@@ -198,30 +182,31 @@ csv_participant = 'participant'
 ##################################################
 ######### only take good USABLE csv files #####
 #################################################
-batch_folder = 'usable-batch-12-7'
-batch_folder = 'usable-batch-old-exp'
+batch_folder = 'usable-batch-old-exp/'
 #batch_folder = 'usable-stanford-batch'
 #batch_folder = 'usable-mturk-batch'
 subject = []
 csvfiles = []   
 
 ### fill up subject with csv basename 
-for csv_ in glob.glob('./mturk-csv/' + batch_folder + '/*.csv'):
+for csv_ in glob.glob('../mturk-csv/' + batch_folder + '/*.csv'):
     #namestripped = os.path.basename(csv_).split('.')[0].split(' ')[0]
     namestripped = os.path.basename(csv_)
     subject.append(namestripped)
-    csvfiles.append(csv_)
+    csvfiles.append(namestripped)
 
 ########## GET ALL STIM NAMES with full path from allstims dir --> allstims list
 allstims = []   # allstims is full file path of every stimuli 
-for fi in glob.glob('./allstims-old/*.wav'):
-    allstims.append(fi)
+
+for fi in glob.glob('../allstims-old-exp/' + '/*.wav'):
+    fi_ = os.path.basename(fi).split('.')[0]
+    allstims.append(fi_)
 
 #%%########## READ IN THE SUBJECT TAPS #################
 
 for csv_file, person in zip(csvfiles, subject):
     print('SUBJECT: ', person)
-    df_block = pd.read_csv(csv_file, keep_default_na=False)
+    df_block = pd.read_csv('../mturk-csv/' + batch_folder + csv_file, keep_default_na=False)
     subject_resps[person] = {}  
 
     try:
@@ -299,34 +284,33 @@ def binTapsFromBeatWindow(taps):
 ##############################################################
 ## FORM the groupings for analysis (by timbre, by coupling
 
-sync_conds = ['none','weak','medium','strong']   # strings for coupling cond
-t_strs = ['t', 'n'] # for delineating timbre ('t') vs. no-timbre ('n') in dictionaries
+#sync_conds = ['veryweak','weak','medium','strong', 'perfect']   # strings for coupling cond
+# t_strs = ['t', 'n'] # for delineating timbre ('t') vs. no-timbre ('n') in dictionaries
 
-## separate allstims by timbre ('t','n') and coupling cond ('none', 'weak', 'medium','strong)
-t_none = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('n') and os.path.basename(elem).split('_')[1] == 't']
-t_weak = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('w') and os.path.basename(elem).split('_')[1] == 't']
-t_medium = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('m') and os.path.basename(elem).split('_')[1] == 't']
-t_strong = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('s') and os.path.basename(elem).split('_')[1] == 't']
+# ## separate allstims by timbre ('t','n') and coupling cond ('none', 'weak', 'medium','strong)
+# t_none = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('n') and os.path.basename(elem).split('_')[1] == 't']
+# t_weak = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('w') and os.path.basename(elem).split('_')[1] == 't']
+# t_medium = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('m') and os.path.basename(elem).split('_')[1] == 't']
+# t_strong = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('s') and os.path.basename(elem).split('_')[1] == 't']
 
-n_none = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('n') and os.path.basename(elem).split('_')[1] == 'n']
-n_weak = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('w') and os.path.basename(elem).split('_')[1] == 'n']
-n_medium = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('m') and os.path.basename(elem).split('_')[1] == 'n']
-n_strong = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('s') and os.path.basename(elem).split('_')[1] == 'n']
+# n_none = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('n') and os.path.basename(elem).split('_')[1] == 'n']
+# n_weak = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('w') and os.path.basename(elem).split('_')[1] == 'n']
+# n_medium = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('m') and os.path.basename(elem).split('_')[1] == 'n']
+# n_strong = [os.path.basename(elem).split('.')[0] for elem in allstims if os.path.basename(elem).startswith('s') and os.path.basename(elem).split('_')[1] == 'n']
 
-timbre_conds = [t_none, t_weak, t_medium, t_strong]
-notimbre_conds = [n_none, n_weak, n_medium, n_strong]
-############ IMPORTANT ###############################################
-############## NOW DOING WHOLE BATCH (TIMBRE AND NON TIMBRE) AT ONCE #######
-#####################################################################
-all_timbre_conds = [timbre_conds, notimbre_conds]
-###############################################################
-#%%
+# timbre_conds = [t_none, t_weak, t_medium, t_strong]
+# notimbre_conds = [n_none, n_weak, n_medium, n_strong]
+# ############ IMPORTANT ###############################################
+# ############## NOW DOING WHOLE BATCH (TIMBRE AND NON TIMBRE) AT ONCE #######
+# #####################################################################
+# all_timbre_conds = [timbre_conds, notimbre_conds]
+################################################################%%
 ####################################################
 ############ ITI ANALYSIS ##############################
 ########################################################
 
 # make directories for individual ITI subject plots
-subject_iti_dir = './analysis-scripts/plots/usable-batch/subject-10-6-plots/'
+subject_iti_dir = '../mturk-csv/' + batch_folder + '/plots/subjects/'
 for person in subject:
     the_subject_iti_dir = subject_iti_dir + person
     if os.path.exists(the_subject_iti_dir) == False:
@@ -345,18 +329,17 @@ def plotSubjectITIperTap(means, stds, label_str, person_str):
 
 #%% MUST INTIALIZE DICTIONARIES BEFORE LOOP 
 ### NB: MUST DO THIS EVERYTIME BEFORE RUNNING ITI ANALYSIS depending on no bb, bb, or outlier algo 
-sndfile_strs = 'Timbre and No Timbre Condition' # e.g. 'Timbre Condition', "No Timbre Condition"
+
+sndfile_strs = 'No Timbre Condition' # e.g. 'Timbre Condition', "No Timbre Condition"
+sync_strs = ['veryweak','weak','medium','strong', 'perfect']   # strings for coupling cond
+
 binned_subject_taps = {}
 subject_sync_cond_taps, subject_sync_cond_itis = {}, {}
 
 for person in subject:
     subject_sync_cond_taps[person], subject_sync_cond_itis[person] = {}, {}
-
-    for sync_str in sync_conds:
-        subject_sync_cond_taps[person][sync_str], subject_sync_cond_itis[person][sync_str] = {}, {}
-        for version, v in zip(all_timbre_conds, t_strs):
-            subject_sync_cond_taps[person][sync_str][v] = []
-            subject_sync_cond_itis[person][sync_str][v] = []
+    for sync_str in sync_strs:
+        subject_sync_cond_taps[person][sync_str], subject_sync_cond_itis[person][sync_str] = [],[]
 
 #%% !!!!! NB:########### ONE THIS CODE BLOCK OR THE NEXT !!!!!! ##########
 ####### 1. BEAT BINNING
@@ -388,123 +371,54 @@ def binTapsFromBeatWindow(taps):
     avg_taps_per_stim = np.mean(avg_taps_per_bin)
     return binnedtaps, avg_taps_per_stim
 
-#%%########### 1) W BEAT BINNING
-beat_binning_flag = 'w beat binning'       
-for version, v in zip(all_timbre_conds, t_strs):
-    for sync_cond, sync_str in zip(version, sync_conds):
-        for sync_cond_version in sync_cond:
-                        
-            sndbeatbin = librosa.samples_to_time(sndbeatbins[sync_cond_version])
-            timbre_version = sync_cond_version.split('_')[1] # get the timbre tag
-                        
-            binned_subject_taps[sync_cond_version] = []
-            
-            for person in subject:
-                try:
-                    tap_resps = subject_resps[person][sync_cond_version] # get subject taps per stim 
-                    binned_taps = binBeats(tap_resps, sndbeatbin)
-                    # beat binning for ITI or no? 
-                    binned_taps, _ = binTapsFromBeatWindow(binned_taps)
-                    binned_subject_taps[sync_cond_version].append(binned_taps) # save subject's binned_taps per stim
-                    # accumulate subject taps per sync_cond
-                    subject_sync_cond_taps[person][sync_str][v].extend(binned_subject_taps[sync_cond_version])                    
-                    # get normalized ITI vector and add it to the subject array
-                    normalized_tap_iti = list(np.diff(binned_taps)/centerperiods[sync_cond_version])
-                    #print(normalized_tap_iti)
-                    subject_sync_cond_itis[person][sync_str][v].append(normalized_tap_iti)
-                    #print(subject_sync_cond_itis[person][sync_str][v])
+  
+#%% concatenate all the stimulus filenames
 
-                except KeyError:
-                    #print('did not tap to ', sync_cond_version)
-                    pass
- ##################################################################       
+vweak = [elem for elem in allstims if elem.startswith('vw')] 
+weak = [elem for elem in allstims if elem.startswith('w')] 
+medium = [elem for elem in allstims if elem.startswith('m')] 
+strong = [elem for elem in allstims if elem.startswith('s')] 
+perfect = [elem for elem in allstims if elem.startswith('p')]
+allconditions = [vweak, weak, medium, strong, perfect]
+
+   
 #%%######### 2. NB: NO BEAT BINNING.......DEFAULT!!!!!!
 beat_binning_flag = 'w NO beat binning'
-for version, v in zip(all_timbre_conds, t_strs):
-    for sync_cond, sync_str in zip(version, sync_conds):
-        #iti_segment_mx[sync_str], iti_segment_sx[sync_str] = {}, {}
-       
-        for sync_cond_version in sync_cond:
-          
-            sndbeatbin = librosa.samples_to_time(sndbeatbins[sync_cond_version])
-            timbre_version = sync_cond_version.split('_')[1] # get the timbre tag
-                        
-            binned_subject_taps[sync_cond_version] = []
-            
-            for person in subject:
-                try:
-                    tap_resps = subject_resps[person][sync_cond_version] # get subject taps per stim 
-                    #binned_taps = binBeats(tap_resps, sndbeatbin)
-                    # beat binning for ITI or no? 
-                    #binned_taps, _ = binTapsFromBeatWindow(binned_taps)
-                    #binned_subject_taps[sync_cond_version].append(binned_taps) # save subject's binned_taps per stim
-
-                    # accumulate subject taps per sync_cond
-                    subject_sync_cond_taps[person][sync_str][v].extend(tap_resps)
+for sync_cond, sync_str in zip(allconditions, sync_strs):
+    for sync_cond_version in sync_cond:
+        print('working on', sync_cond_version)
+      
+        sndbeatbin = librosa.samples_to_time(sndbeatbins[sync_cond_version])
                     
-                    # get normalized ITI vector and add it to the subject array
-                    normalized_tap_iti = list(np.diff(tap_resps)/centerperiods[sync_cond_version])
-                    # if longer than 19 beats, take last 19 beats 
-                    if len(normalized_tap_iti) > 19:
-                        normalized_tap_iti = normalized_tap_iti[len(normalized_tap_iti)-19:]
-                    subject_sync_cond_itis[person][sync_str][v].append(normalized_tap_iti)
-                    #print(subject_sync_cond_itis[person][sync_str][v])
-
-                except KeyError:
-                    #print('did not tap to ', sync_cond_version)
-                    pass
+        binned_subject_taps[sync_cond_version] = []
+        
+        for person in subject:
+            try:
+                tap_resps = subject_resps[person][sync_cond_version] # get subject taps per stim 
+                #binned_taps = binBeats(tap_resps, sndbeatbin)
+                # beat binning for ITI or no? 
+                #binned_taps, _ = binTapsFromBeatWindow(binned_taps)
+                #binned_subject_taps[sync_cond_version].append(binned_taps) # save subject's binned_taps per stim
+    
+                # accumulate subject taps per sync_cond
+                subject_sync_cond_taps[person][sync_str].append(tap_resps)
+                
+                # get normalized ITI vector and add it to the subject array
+                normalized_tap_iti = list(np.diff(tap_resps)/centerperiods[sync_cond_version])
+                # if longer than 19 beats, take last 19 beats 
+                # if len(normalized_tap_iti) > 19:
+                #     normalized_tap_iti = normalized_tap_iti[len(normalized_tap_iti)-19:]
+                subject_sync_cond_itis[person][sync_str].append(normalized_tap_iti)
+                #print(subject_sync_cond_itis[person][sync_str][v])
+    
+            except KeyError:
+                #print('did not tap to ', sync_cond_version)
+                pass
 ###############################
 ###############################################
 #%%############### 3. NB: OUTLIER ALGORITHM 
 
-suptitle_str = 'Timbre and No Timbre Condition' # e.g. 'Timbre Condition', "No Timbre Condition"
 
-binned_subject_taps = {}
-subject_sync_cond_taps, subject_sync_cond_itis = {}, {}
-
-for person in subject:
-    subject_sync_cond_taps[person], subject_sync_cond_itis[person] = {}, {}
-
-    for sync_str in sync_conds:
-        subject_sync_cond_taps[person][sync_str], subject_sync_cond_itis[person][sync_str] = {}, {}
-        for version, v in zip(all_timbre_conds, t_strs):
-            subject_sync_cond_taps[person][sync_str][v] = []
-            subject_sync_cond_itis[person][sync_str][v] = []
-            
-beat_binning_flag = 'w algo outlier'
-for version, v in zip(all_timbre_conds, t_strs):
-    for sync_cond, sync_str in zip(version, sync_conds):
-        iti_segment_mx[sync_str], iti_segment_sx[sync_str] = {}, {}
-
-        
-        for sync_cond_version in sync_cond:
-          
-            sndbeatbin = librosa.samples_to_time(sndbeatbins[sync_cond_version])
-            timbre_version = sync_cond_version.split('_')[1] # get the timbre tag
-                        
-            binned_subject_taps[sync_cond_version] = []
-            
-            for person in subject:
-                try:
-                    tap_resps = subject_resps[person][sync_cond_version] # get subject taps per stim 
-                    tap_iti = np.diff(tap_resps)
-                    tap_mean = np.nanmean(tap_iti)
-                    tap_std = np.nanstd(tap_iti)
-                    tap_resps_algo = [tap for tap in tap_iti if (tap < tap_mean + 2*tap_std) and (tap >= tap_mean - 2*tap_std)]
-                    tap_resps_secs = [tap_resps[t] for t, tap in enumerate(tap_iti) if (tap < tap_mean + 2*tap_std) and (tap >= tap_mean - 2*tap_std)]
-
-                    subject_sync_cond_taps[person][sync_str][v].extend(tap_resps_secs)
-                    
-                    # get normalized ITI vector and add it to the subject array
-                    normalized_tap_iti = list(np.array(tap_resps_algo)/centerperiods[sync_cond_version])
-                    #print(normalized_tap_iti)
-                    subject_sync_cond_itis[person][sync_str][v].append(normalized_tap_iti)
-
-                except KeyError:
-                    #print('did not tap to ', sync_cond_version)
-                    pass
-                    
-                    
 #%% #%% ############## NEW ITI PLOTS!!!! ##################
 ######################################################
 
@@ -513,7 +427,7 @@ for version, v in zip(all_timbre_conds, t_strs):
 # how many beat sections to analyze?
 #beatsegments = [(0,5), (5,10), (10,15), (15,20)] # 4, 5 beat sections
 #beatsegments = [(0,4), (4,8), (8,12), (12,16), (16,20)] # 5, 4 beat sections 
-beatsegments = [(0,3), (3,6), (6,9), (9,12), (12, 15), (15,18)] # 6,3 beat sections
+beatsegments = [(0,3), (3,6), (6,9)] # 6,3 beat sections
 #beatsegments = [(0,2), (2,4), (4,6), (6,8), (8, 10), (10,12), (12,14), (14,16), (16, 18)] # 9, 2 beat sections
 
 
@@ -525,7 +439,7 @@ iti_mx_error, iti_sx_error = {}, {}
 # beat str array for csv file output 
 beat_strs = [str(i) for i in range(len(beatsegments))]
 
-beat_segment_dir = './analysis-scripts/plots/beat-segment-analysis/' + str(len(beatsegments)) + '-beat-segments/' 
+beat_segment_dir = './plots/bsa-old-exp/' + str(len(beatsegments)) + '-beat-segments/' 
 itis_dir = beat_segment_dir + '/ITIs/'
 pcs_dir = beat_segment_dir + '/PCs/'
 csvs_dir = beat_segment_dir + '/csvs/'
@@ -549,25 +463,25 @@ makeDir(subject_dir + 'phases/')
 now = datetime.datetime.now()
 timestamp = str(now.month) + '-' + str(now.day) + '_' + str(now.hour) + '-' + str(now.minute)   
 
-makeDir('./analysis-scripts/ITIs/')
+makeDir('./ITIs/')
 
 
-#%%#### FILTER OUT SUBJECTS remove subjects with constraint: avg iti across beatsegs on 'weak' < 0.67
+#%%#### NB: DO YOU WANT TO FILTER OUT SUBJECTS?
+######### FILTER OUT SUBJECTS remove subjects with constraint: avg iti across beatsegs on 'weak' < 0.67
 
 badsubjects = []
 for person in subject:
-    for j, sync_str in enumerate(sync_conds):
-        for i, v in enumerate(t_strs): 
-            df = pd.DataFrame(subject_sync_cond_itis[person][sync_str][v])
-            person_avg_iti = np.nanmean(df.iloc[-18:].mean(axis=0).values)
-            
-            if sync_str == 'weak':
-                if person_avg_iti < 0.67:
-                    print(person, sync_str, v, person_avg_iti)
-                    badsubjects.append(person)
-                if person_avg_iti > 1.33:
-                    print(person, sync_str, v, person_avg_iti)
-                    badsubjects.append(person)
+    for j, sync_str in enumerate(sync_strs):
+        df = pd.DataFrame(subject_sync_cond_itis[person][sync_str])
+        person_avg_iti = np.nanmean(df.iloc[-18:].mean(axis=0).values)
+        
+        if sync_str == 'weak':
+            if person_avg_iti < 0.67:
+                print(person, sync_str, person_avg_iti)
+                badsubjects.append(person)
+            if person_avg_iti > 1.33:
+                print(person, sync_str, person_avg_iti)
+                badsubjects.append(person)
   
 # remove duplicates from badsubjects 
 badsubjects = list(set(badsubjects))
@@ -578,17 +492,14 @@ for subj in subject:
     if subj in badsubjects:
         usable_subjects.remove(subj)
 print('total subjects:', len(subject), '\n', 'usable subjects:', len(usable_subjects), '\n',len(badsubjects), 'subjects were filtered out')
-      
-#%% Run participant stats with filtered subjects to tally totals per study mturk,stanford 
-from utils.parse_subjects import parse_subject_info 
+#%% IF YOU WANNA KEEP ALL THE SUBJECTS
+usable_subjects = subject   
 
-## def parseSubjectInfo(batch_folder, usable_batch, badsubjects)
-
-parse_subject_info('./mturk-csv/' + batch_folder, usable_subjects, badsubjects)  
 
 #%% ############### PLOT WITHIN SUBJECT ITI AVERAGES AGGREGATED ON SAME PLOT WITH FILTERED SUBJECTS
-fig_t, ax_t = plt.subplots(nrows=4, ncols =2, figsize=(10,7), sharex=True)
-fig_n, ax_n = plt.subplots(nrows=4, ncols =2, figsize=(10,7), sharex=True)
+sync_conds = sync_strs
+
+fig_n, ax_n = plt.subplots(nrows=len(sync_conds), ncols =2, figsize=(10,7), sharex=True)
 
 
 ## intialize dictionaries 
@@ -596,99 +507,70 @@ mx_all_subject_iti_seg = {}
 sx_all_subject_iti_seg = {}
 
 for sync_str in sync_conds:
-    mx_all_subject_iti_seg[sync_str], sx_all_subject_iti_seg[sync_str] = {},{}
-    for v in t_strs:
-        mx_all_subject_iti_seg[sync_str][v], sx_all_subject_iti_seg[sync_str][v] = [],[]
+    mx_all_subject_iti_seg[sync_str], sx_all_subject_iti_seg[sync_str] = [],[]
+
         
 
 for person in usable_subjects:
     sc = 0
     for j, sync_str in enumerate(sync_conds):
-        for i, v in enumerate(t_strs):           
             
-            person_iti = pd.DataFrame(subject_sync_cond_itis[person][sync_str][v])
-            
-            mx_subj_iti_seg, sx_subj_iti_seg = [],[]
-            for beatseg, beat_str in zip(beatsegments, beat_strs):
-                tap_col = person_iti.iloc[:,beatseg[0]:beatseg[1]].values
-                mx = np.nanmean(tap_col)
-                sx = np.nanstd(tap_col)
-                mx_subj_iti_seg.append(mx)
-                sx_subj_iti_seg.append(sx)
-            
-            mx_all_subject_iti_seg[sync_str][v].append(mx_subj_iti_seg)
-            sx_all_subject_iti_seg[sync_str][v].append(sx_subj_iti_seg)
-            
-            ### plot individual subject ITI per beat segment 
+        person_iti = pd.DataFrame(subject_sync_cond_itis[person][sync_str])
         
-            if v == 't':
-                version_str = 'timbre'
-                ax_t[j,0].plot(mx_subj_iti_seg, linewidth=0.5, alpha=0.5, label=sync_str)
-                ax_t[j,0].set_title('mean ' + version_str + ' ' + sync_str)
-                ax_t[j,1].plot(sx_subj_iti_seg, linewidth=0.5, alpha=0.5, label=sync_str)
-                ax_t[j,1].set_title('SD ' + version_str + ' ' + sync_str)
-                
-            else:
-                version_str = 'no-timbre'
-                ax_n[j,0].plot(mx_subj_iti_seg, linewidth=0.5, alpha=0.5, label=sync_str)
-                ax_n[j,0].set_title('mean ' + version_str + ' ' + sync_str)
-                ax_n[j,1].plot(sx_subj_iti_seg, linewidth=0.5, alpha=0.5, label=sync_str)                
-                ax_n[j,1].set_title('SD ' + version_str + ' ' + sync_str)
+        mx_subj_iti_seg, sx_subj_iti_seg = [],[]
+        for beatseg, beat_str in zip(beatsegments, beat_strs):
+            tap_col = person_iti.iloc[:,beatseg[0]:beatseg[1]].values
+            mx = np.nanmean(tap_col)
+            sx = np.nanstd(tap_col)
+            mx_subj_iti_seg.append(mx)
+            sx_subj_iti_seg.append(sx)
+        
+        mx_all_subject_iti_seg[sync_str].append(mx_subj_iti_seg)
+        sx_all_subject_iti_seg[sync_str].append(sx_subj_iti_seg)
+        
+        ### plot individual subject ITI per beat segment 
+    
+
+        version_str = 'no-timbre'
+        ax_n[j,0].plot(mx_subj_iti_seg, linewidth=0.6, alpha=0.6, label=sync_str)
+        ax_n[j,0].set_title('mean ' + version_str + ' ' + sync_str)
+        ax_n[j,1].plot(sx_subj_iti_seg, linewidth=0.6, alpha=0.6, label=sync_str)                
+        ax_n[j,1].set_title('SD ' + version_str + ' ' + sync_str)
 
 #### plot average subject ITI per beat segment
 #ax[2,i].errorbar(xrange, subject_iti_stds, yerr=iti_sx_error[sync_str][v], label=sync_str, marker='.', capsize=3)        
 
 
-
-error_range = np.arange(6)
+error_range = np.arange(len(beatsegments))
 for j, sync_str in enumerate(sync_conds):
-    for v in t_strs:
         # mx averages
-        mx_all = np.array(mx_all_subject_iti_seg[sync_str][v])
-        mx_all_segs = np.nanmean(mx_all, axis=0)
-        mx_all_segs_error = np.nanstd(mx_all, axis=0)
-        # sx averages
-        sx_all = np.array(sx_all_subject_iti_seg[sync_str][v])
-        sx_all_segs = np.nanmean(sx_all, axis=0)
-        sx_all_segs_error = np.nanstd(sx_all, axis=0)
-
-
-        if v == 't':
-            #ax_t[j,0].plot(mx_all_segs, color='r')
-            #ax_t[j,1].plot(sx_all_segs, color='r')
-            
-            ax_t[j,0].errorbar(error_range, mx_all_segs, yerr=mx_all_segs_error, label=sync_str, marker='.', color='r', capsize=3)
-            ax_t[j,1].errorbar(error_range, sx_all_segs, yerr=sx_all_segs_error, label=sync_str, marker='.', color='r', capsize=3)
-            
-        else:
+    mx_all = np.array(mx_all_subject_iti_seg[sync_str])
+    mx_all_segs = np.nanmean(mx_all, axis=0)
+    mx_all_segs_error = np.nanstd(mx_all, axis=0)
+    # sx averages
+    sx_all = np.array(sx_all_subject_iti_seg[sync_str])
+    sx_all_segs = np.nanmean(sx_all, axis=0)
+    sx_all_segs_error = np.nanstd(sx_all, axis=0)
             #ax_n[j,0].plot(mx_all_segs, color='r')
             #ax_n[j,1].plot(sx_all_segs, color='r')
-            ax_n[j,0].errorbar(error_range, mx_all_segs, yerr=mx_all_segs_error, label=sync_str, marker='.', color='r',capsize=3)
-            ax_n[j,1].errorbar(error_range, sx_all_segs, yerr=sx_all_segs_error, label=sync_str, marker='.', color='r',capsize=3)
-                    
+    ax_n[j,0].errorbar(error_range, mx_all_segs, yerr=mx_all_segs_error, label=sync_str, marker='.', color='r',capsize=3)
+    ax_n[j,1].errorbar(error_range, sx_all_segs, yerr=sx_all_segs_error, label=sync_str, marker='.', color='r',capsize=3)
+            
    
-fig_t.suptitle('Timbre ITI')
 fig_n.suptitle('No-Timbre ITI')        
    
-fig_t.tight_layout()
 fig_n.tight_layout() 
 
-for ax_1, ax_2 in zip(ax_t[:,0].flat, ax_n[:,0].flat):
-    ax_1.set_ylim([0, 2])
-    ax_2.set_ylim([0, 2])
-for ax_1, ax_2 in zip(ax_t[:,1].flat, ax_n[:,1].flat):
-    ax_1.set_ylim([-0.5, 1.5])
-    ax_2.set_ylim([-0.5, 1.5])
-for ax_1, ax_2 in zip(ax_t[-1].flat, ax_n[-1].flat):
+for ax_1 in ax_n[:,0].flat:
+    ax_1.set_ylim([0, 1.2])
+for ax_1 in ax_n[:,1].flat:
+    ax_1.set_ylim([-0.1, 1.2])
+for ax_1 in ax_n[-1].flat:
     ax_1.set_xlabel('beat segment')               
-    ax_2.set_xlabel('beat segment')
-    ax_1.set_xticks(np.arange(0,6))               
-    ax_1.set_xticklabels([str(elem) for elem in np.arange(1,7)])               
-    ax_2.set_xticks(np.arange(0,6))               
-    ax_2.set_xticklabels([str(elem) for elem in np.arange(1,7)])                 
+    ax_1.set_xticks(np.arange(0,len(beatsegments)))               
+    ax_1.set_xticklabels([str(elem) for elem in np.arange(1,len(beatsegments)+1)])               
 
-fig_t.savefig('./analysis-scripts/plots/beat-segment-analysis/6-beat-segments/ITIs/subject-ITI-plots/t-mx-aggregates.png', dpi=150)                
-fig_n.savefig('./analysis-scripts/plots/beat-segment-analysis/6-beat-segments/ITIs/subject-ITI-plots/n-mx-aggregates.png', dpi=150)                
+fig_n.savefig(beat_segment_dir + '/ITIs/subject-ITI-plots/n-mx-aggregates.png', dpi=150)                
         
 #%% CREATE CSV of mx, sx for usable subjects
 import csv
@@ -696,49 +578,42 @@ csv_filename_str = csvs_dir + timestamp + '-' + beat_binning_flag + '.csv'
  
 with open(csv_filename_str, 'w', newline='') as file:
     writer = csv.writer(file)
-    writer.writerow(["subject", "study", "version", "condition", "section", "mx", "sx"])
+    writer.writerow(["subject", "condition", "section", "mx", "sx"])
     
     for sync_str in sync_conds:
-        iti_segment_mx[sync_str], iti_segment_sx[sync_str] = {}, {}
-        iti_mx[sync_str], iti_sx[sync_str] = {}, {}
-        iti_mx_error[sync_str], iti_sx_error[sync_str] = {}, {}
-        
-        for v in t_strs:
-            iti_mx[sync_str][v], iti_sx[sync_str][v] = [], []
-            iti_mx_error[sync_str][v], iti_sx_error[sync_str][v] = [], []
-                        
-            for person in usable_subjects: 
-                print(person, sync_str, v)
-                study_number = person.split('_')[1].split('-')[1]
-                print([len(elem) for elem in subject_sync_cond_itis[person][sync_str][v]])
-                
-                df_taps = pd.DataFrame(subject_sync_cond_itis[person][sync_str][v])
-                
-                iti_segment_mx[sync_str][v], iti_segment_sx[sync_str][v] = [], []
-                
-                for beatseg, beat_str in zip(beatsegments, beat_strs):
-                    tap_col = df_taps.iloc[:,beatseg[0]:beatseg[1]].values
-                    # get mean, std
-                    mx = np.nanmean(tap_col)
-                    #sx = np.nanmean(np.nanstd(tap_col, axis=1))
-                    sx = np.nanstd(tap_col)
-                    #sx = np.nanstd(np.nanstd(tap_col, axis=1))
-               
-                    iti_segment_mx[sync_str][v].append(mx) 
-                    iti_segment_sx[sync_str][v].append(sx)
+        iti_mx[sync_str], iti_sx[sync_str] = [], []
+        iti_mx_error[sync_str], iti_sx_error[sync_str] = [], []
                     
-                    writer.writerow([person, study_number, v, sync_str, beat_str, mx, sx])
+        for person in usable_subjects: 
+            print(person, sync_str)
+            iti_segment_mx[sync_str], iti_segment_sx[sync_str] = [], []
+           
+            df_taps = pd.DataFrame(subject_sync_cond_itis[person][sync_str])
+            
+            
+            for beatseg, beat_str in zip(beatsegments, beat_strs):
+                tap_col = df_taps.iloc[:,beatseg[0]:beatseg[1]].values
+                # get mean, std
+                mx = np.nanmean(tap_col)
+                #sx = np.nanmean(np.nanstd(tap_col, axis=1))
+                sx = np.nanstd(tap_col)
+                #sx = np.nanstd(np.nanstd(tap_col, axis=1))
+           
+                iti_segment_mx[sync_str].append(mx) 
+                iti_segment_sx[sync_str].append(sx)
                 
-                # accumulate mean iti, and sd iti per person per sync_cond, nb: have to take means later
-                iti_mx[sync_str][v].append(iti_segment_mx[sync_str][v])
-                iti_sx[sync_str][v].append(iti_segment_sx[sync_str][v])
+                writer.writerow([person, sync_str, beat_str, mx, sx])
+            
+            # accumulate mean iti, and sd iti per person per sync_cond, nb: have to take means later
+            iti_mx[sync_str].append(iti_segment_mx[sync_str])
+            iti_sx[sync_str].append(iti_segment_sx[sync_str])
 
-            subject_iti_means = np.array(iti_mx[sync_str][v])
-            subject_iti_stds = np.array(iti_sx[sync_str][v])
-                   
-            # COMPUTER SUBJECT-TO-SUBJECT ERRORS FOR MX,SX PER SYNC_COND
-            iti_mx_error[sync_str][v] = np.nanstd(subject_iti_means, axis=0)
-            iti_sx_error[sync_str][v] = np.nanstd(subject_iti_stds, axis=0)
+        subject_iti_means = np.array(iti_mx[sync_str])
+        subject_iti_stds = np.array(iti_sx[sync_str])
+               
+        # COMPUTER SUBJECT-TO-SUBJECT ERRORS FOR MX,SX PER SYNC_COND
+        iti_mx_error[sync_str] = np.nanstd(subject_iti_means, axis=0)
+        iti_sx_error[sync_str] = np.nanstd(subject_iti_stds, axis=0)
             
 #%%############ PLOT THE SUBJECT MEAN and SD ITIs  #############
 ################################################################          
@@ -747,7 +622,7 @@ sns.set_palette(sns.color_palette("Paired"))
 
 plt.figure()
 
-fig, ax = plt.subplots(nrows=3,ncols=2, figsize=(10,5), sharex=True, gridspec_kw={"height_ratios":[0.02,1,1]})
+fig, ax = plt.subplots(nrows=3,ncols=1, figsize=(10,10), sharex=True, gridspec_kw={"height_ratios":[0.02,1,1]})
 
 # labels for beat sections 
 xlabels_pos = np.arange(0,len(beatsegments))
@@ -756,50 +631,51 @@ beatsectionlabels = [str(elem[0]) + '-' + str(elem[1]) for elem in beatsegments]
 import matplotlib.ticker as ticker
 
 
-for i, v in enumerate(t_strs):
-    for j, sync_str in enumerate(sync_conds):
-        iti_mx_arr = np.array(iti_mx[sync_str][v])
-        iti_sx_arr = np.array(iti_sx[sync_str][v])
-        
-        subject_iti_means = np.nanmean(iti_mx[sync_str][v], axis=0)
-        subject_iti_stds = np.nanmean(iti_sx[sync_str][v], axis=0)
-        
-        xrange = np.linspace(0, len(subject_iti_means) - 1, len(subject_iti_means))       
-        # MEANS
-        ax[1,i].plot(subject_iti_means, linewidth=0.8)
-        ax[1,i].errorbar(xrange, subject_iti_means, yerr=iti_mx_error[sync_str][v], label=sync_str, marker='.', capsize=3, linewidth=0.7)        
-        # STDS
-        ax[2,i].plot(subject_iti_stds, linewidth=0.8)
-        ax[2,i].errorbar(xrange, subject_iti_stds, yerr=iti_sx_error[sync_str][v], label=sync_str, marker='.', capsize=3, linewidth=0.7)        
-        
-        ax[2,i].set_title('ITI SD')
-        ax[1,i].set_title('ITI MEAN')
-        
-        ### FORMATTING ###
-        # ax[1,i].set_ylim([0.85, 2.0])
-        # ax[2,i].set_ylim([-0.2, 1.5])
-        
-        # if beat_binning_flag == 'w beat binning':
-        #     ax[1,i].set_ylim([0.75, 2.1])
-        #     ax[2,i].set_ylim([-0.1, 0.95]) 
-        # else:
-        #     ax[1,i].set_ylim([0.25, 1.8])
-        #     ax[2,i].set_ylim([-0.1, 0.75]) 
 
-        ax[1,i].set_ylim([0.5, 1.65])
-        ax[2,i].set_ylim([-0.5, 1.75])             
+for j, sync_str in enumerate(sync_conds):
+    iti_mx_arr = np.array(iti_mx[sync_str])
+    iti_sx_arr = np.array(iti_sx[sync_str])
     
-        ax[1,i].set_xticks(xlabels_pos)
-        ax[2,i].set_xticklabels(beatsectionlabels, fontsize=6)
-        ax[2,i].set_xlabel('beat segment')
+    subject_iti_means = np.nanmean(iti_mx[sync_str], axis=0)
+    subject_iti_stds = np.nanmean(iti_sx[sync_str], axis=0)
+    
+    xrange = np.linspace(0, len(subject_iti_means) - 1, len(subject_iti_means))       
+    # MEANS
+    ax[1].plot(subject_iti_means, linewidth=0.8)
+    ax[1].errorbar(xrange, subject_iti_means, yerr=iti_mx_error[sync_str], label=sync_str, marker='.', capsize=3, linewidth=0.7)        
+    # STDS
+    ax[2].plot(subject_iti_stds, linewidth=0.8)
+    ax[2].errorbar(xrange, subject_iti_stds, yerr=iti_sx_error[sync_str], label=sync_str, marker='.', capsize=3, linewidth=0.7)        
+ 
+    ax[1].set_title('ITI MEAN')
+    ax[2].set_title('ITI SD')
+    
+    ### FORMATTING ###
+    # ax[1,i].set_ylim([0.85, 2.0])
+    # ax[2,i].set_ylim([-0.2, 1.5])
+    
+    # if beat_binning_flag == 'w beat binning':
+    #     ax[1,i].set_ylim([0.75, 2.1])
+    #     ax[2,i].set_ylim([-0.1, 0.95]) 
+    # else:
+    #     ax[1,i].set_ylim([0.25, 1.8])
+    #     ax[2,i].set_ylim([-0.1, 0.75]) 
 
-cols = ['{}'.format(col) for col in ['Timbre', 'No Timbre']]
-for ax, col in zip(ax[0], cols):
-    ax.axis("off")
-    ax.set_title(col, fontweight='bold')
+    ax[1].set_ylim([0.5, 1.25])
+    ax[2].set_ylim([-0.2, 0.85])             
+
+    ax[1].set_xticks(xlabels_pos)
+    ax[2].set_xticklabels(beatsectionlabels, fontsize=6)
+    ax[2].set_xlabel('beat segment')
+
+# cols = ['{}'.format(col) for col in ['Timbre', 'No Timbre']]
+# for ax, col in zip(ax[0], cols):
+#     ax.axis("off")
+#     ax.set_title(col, fontweight='bold')
     
 plt.legend(title='coupling conditions', bbox_to_anchor=(1., 1.05))
 fig.tight_layout()
+print('saving figure as ', itis_dir + timestamp + ' timbre-no-timbre-ITI-SD-' + beat_binning_flag + '.png')
 plt.savefig(itis_dir + timestamp + ' timbre-no-timbre-ITI-SD-' + beat_binning_flag + '.png', dpi=160)
 
 
@@ -842,7 +718,7 @@ def binTapsFromBeatWindow(taps):
     avg_taps_per_stim = np.mean(avg_taps_per_bin)
     return binnedtaps, avg_taps_per_stim
 
-
+#%%
 
          
 
@@ -865,18 +741,18 @@ all_subject_taps_per_cond = {}
 
 plt.figure()
 
-fig_subject, ax_subject = plt.subplots(nrows=8, ncols=len(beatsegments), subplot_kw=dict(polar=True), gridspec_kw=
+fig_subject, ax_subject = plt.subplots(nrows=5, ncols=len(beatsegments), subplot_kw=dict(polar=True), gridspec_kw=
                             {'wspace':0.2,'hspace':0.01,'top':0.9, 'bottom':0.1, 'left':0.125, 'right':0.9}, 
                             figsize=(10,8), 
                             sharex=True)
 plt.figure()
-fig_model, ax_model = plt.subplots(nrows=8, ncols=len(beatsegments), subplot_kw=dict(polar=True), gridspec_kw=
+fig_model, ax_model = plt.subplots(nrows=5, ncols=len(beatsegments), subplot_kw=dict(polar=True), gridspec_kw=
                             {'wspace':0.2,'hspace':0.01,'top':0.9, 'bottom':0.1, 'left':0.125, 'right':0.9}, 
                             figsize=(10,8), 
                             sharex=True)
 
 plt.figure()
-fig_combined, ax_combined = plt.subplots(nrows=8, ncols=len(beatsegments), subplot_kw=dict(polar=True), gridspec_kw=
+fig_combined, ax_combined = plt.subplots(nrows=5, ncols=len(beatsegments), subplot_kw=dict(polar=True), gridspec_kw=
                             {'wspace':0.2,'hspace':0.01,'top':0.9, 'bottom':0.1, 'left':0.125, 'right':0.9}, 
                             figsize=(10,8), 
                             sharex=True)
@@ -909,99 +785,97 @@ random_color = np.random.random(4000)
 
 import csv
 
-R_csv = open('./analysis-scripts/plots/beat-segment-analysis/' + str(len(beatsegments)) + '-beat-segments/PCs/R_csv.csv', 'w')
+R_csv = open(beat_segment_dir + '/PCs/R_csv.csv', 'w')
 R_writer = csv.writer(R_csv)
-R_writer.writerow(['coupling condition', 'beat section', 'timbre version', 'R model', 'R subject', 'psi model', 'psi subject'])
+R_writer.writerow(['coupling condition', 'beat section', 'R model', 'R subject', 'psi model', 'psi subject'])
 
-vc = 0
-for version,v in zip(all_timbre_conds, t_strs):
-    the_osc_phases[v] = {}
-    osc_phases_cond[v] = {}
+sc = 0
+for sync_conds, sync_str in zip(allconditions, sync_strs):
+    the_osc_phases = {}
+    osc_phases_cond = {}
     
-    all_subject_binned_taps_per_stim[v], all_subject_binned_taps_per_cond[v] = {}, {}
-    all_subject_taps_per_cond[v] = {}
+    all_subject_binned_taps_per_stim, all_subject_binned_taps_per_cond = {}, {}
+    all_subject_taps_per_cond = {}
     
-    
-    sc = 0
-    for sync_cond, sync_str in zip(version, sync_conds):
-        osc_phases_cond[v][sync_str] = []
-        all_subject_binned_taps_per_cond[v][sync_str] = []
+    osc_phases_cond[sync_str] = []
+    all_subject_binned_taps_per_cond[sync_str] = []
+
+
+    for sync_cond_version in sync_conds:
+        print('working on %r'%(sync_cond_version))
+            
+        osc_phases = {}
+        stim_phases_sec = {}
         
-        for n, sync_cond_version in enumerate(sync_cond):
-            #print('working on %r %r/%r'%(sync_cond_version, n, len(sync_cond)))
-            
-            osc_phases = {}
-            stim_phases_sec = {}
-            
-            sndbeatbin = librosa.samples_to_time(sndbeatbins[sync_cond_version])
-            y, _ = librosa.load('./allstims/' + sync_cond_version + '.wav')
-            phases = np.load('./all-stim-all-zcs/' + sync_cond_version + '.npy', allow_pickle=True)
+        sndbeatbin = librosa.samples_to_time(sndbeatbins[sync_cond_version])
+        y, _ = librosa.load('../allstims-old-exp/' + sync_cond_version + '.wav')
+        phases = np.load('../phases-zcs-old-exp/' + sync_cond_version + '.npy', allow_pickle=True)
 
-            the_osc_phases[v][sync_cond_version] = []
+        the_osc_phases[sync_cond_version] = []
 
-            ################## GENERATIVE MODEL ##################################
-            for p, osc in enumerate(phases):
-                binned_zcs = binBeats(osc, sndbeatbin)
-                binned_zcs, _ = binTapsFromBeatWindow(binned_zcs)
-                osc_phases[str(p)] = []
+        ################## GENERATIVE MODEL ##################################
+        for p, osc in enumerate(phases):
+            binned_zcs = binBeats(osc, sndbeatbin)
+            binned_zcs, _ = binTapsFromBeatWindow(binned_zcs)
+            osc_phases[str(p)] = []
+            
+            for i in range(1, len(sndbeatbin)):
+                zctobin = binned_zcs[i-1]
+                binmin = sndbeatbin[i-1]
+                binmax = sndbeatbin[i]
+                bininterp = interp1d([binmin, binmax], [0, 2*np.pi]) #map tap values within window from 0-2pi
+                osc_phases[str(p)].append(float(bininterp(zctobin)))
+            
+            the_osc_phases[sync_cond_version].append(osc_phases[str(p)])
+        
+        osc_phases_cond[sync_str].extend(the_osc_phases[sync_cond_version])
+        
+        ################# SUBJECTS TAPS ###################################
+        all_subject_binned_taps_per_stim[sync_cond_version] = []  
+        
+        for person in usable_subjects:
+            try:
+                taps = subject_resps[person][sync_cond_version]
+                
+                tap_iti = np.diff(taps)
+                tap_mean = np.nanmean(tap_iti)
+                tap_std = np.nanstd(tap_iti)
+                tap_resps_algo = [tap for tap in tap_iti if (tap < tap_mean + 2*tap_std) and (tap >= tap_mean - 2*tap_std)]
+                tap_resps_secs = [taps[t] for t, tap in enumerate(tap_iti) if (tap < tap_mean + 2*tap_std) and (tap >= tap_mean - 2*tap_std)]
+                #binned_taps = tap_resps_secs                   
+ 
+                
+                binned_taps = binBeats(tap_resps_secs, sndbeatbin)
+                binned_taps, avg_taps_per_bin = binTapsFromBeatWindow(binned_taps) 
+                 
+                subject_binned_taps_per_stim[person] = []
                 
                 for i in range(1, len(sndbeatbin)):
-                    zctobin = binned_zcs[i-1]
+                    taptobin = binned_taps[i-1]
                     binmin = sndbeatbin[i-1]
                     binmax = sndbeatbin[i]
                     bininterp = interp1d([binmin, binmax], [0, 2*np.pi]) #map tap values within window from 0-2pi
-                    osc_phases[str(p)].append(float(bininterp(zctobin)))
-                
-                the_osc_phases[v][sync_cond_version].append(osc_phases[str(p)])
-            
-            osc_phases_cond[v][sync_str].extend(the_osc_phases[v][sync_cond_version])
-            
-            ################# SUBJECTS TAPS ###################################
-            all_subject_binned_taps_per_stim[v][sync_cond_version] = []  
-            
-            for person in usable_subjects:
-                try:
-                    taps = subject_resps[person][sync_cond_version]
+                    subject_binned_taps_per_stim[person].append(float(bininterp(taptobin)))
                     
-                    tap_iti = np.diff(taps)
-                    tap_mean = np.nanmean(tap_iti)
-                    tap_std = np.nanstd(tap_iti)
-                    tap_resps_algo = [tap for tap in tap_iti if (tap < tap_mean + 2*tap_std) and (tap >= tap_mean - 2*tap_std)]
-                    tap_resps_secs = [taps[t] for t, tap in enumerate(tap_iti) if (tap < tap_mean + 2*tap_std) and (tap >= tap_mean - 2*tap_std)]
-                    #binned_taps = tap_resps_secs                   
- 
-                    
-                    binned_taps = binBeats(tap_resps_secs, sndbeatbin)
-                    binned_taps, avg_taps_per_bin = binTapsFromBeatWindow(binned_taps) 
-                     
-                    subject_binned_taps_per_stim[person] = []
-                    
-                    for i in range(1, len(sndbeatbin)):
-                        taptobin = binned_taps[i-1]
-                        binmin = sndbeatbin[i-1]
-                        binmax = sndbeatbin[i]
-                        bininterp = interp1d([binmin, binmax], [0, 2*np.pi]) #map tap values within window from 0-2pi
-                        subject_binned_taps_per_stim[person].append(float(bininterp(taptobin)))
-                        
-                    all_subject_binned_taps_per_stim[v][sync_cond_version].append(subject_binned_taps_per_stim[person])
-      
-                except:
-                    pass
-                                
-            all_subject_binned_taps_per_cond[v][sync_str].extend(all_subject_binned_taps_per_stim[v][sync_cond_version])        
-                
+                all_subject_binned_taps_per_stim[sync_cond_version].append(subject_binned_taps_per_stim[person])
+  
+            except:
+                pass
+                            
+        all_subject_binned_taps_per_cond[sync_str].extend(all_subject_binned_taps_per_stim[sync_cond_version])        
+            
         ############### take dataframes from subject, model per coupling cond ###################################
-        df_model  = pd.DataFrame(osc_phases_cond[v][sync_str]) 
-        df_subject = pd.DataFrame(all_subject_binned_taps_per_cond[v][sync_str])     # (470,19) = (5*tempo*2versions * 47 subjects) for coupling cond and timbre version                        
+        df_model  = pd.DataFrame(osc_phases_cond[sync_str]) 
+        df_subject = pd.DataFrame(all_subject_binned_taps_per_cond[sync_str])     # (470,19) = (5*tempo*2versions * 47 subjects) for coupling cond and timbre version                        
                      
         
-        #### COLORS FOR SUBJECT AND MODEL ###########                       
-        if v == "t":
-            model_version_color = 'steelblue'
-            subject_version_color = 'steelblue'            
-        else:
-            model_version_color = 'firebrick'
-            subject_version_color = 'firebrick' 
+        # #### COLORS FOR SUBJECT AND MODEL ###########                       
+        # if v == "t":
+        #     model_version_color = 'steelblue'
+        #     subject_version_color = 'steelblue'            
+        # else:
+        model_version_color = 'steelblue'
+        subject_version_color = 'firebrick' 
                         
         for m, beatwindow in enumerate(beatsegments):
             # SUBJECT
@@ -1042,28 +916,28 @@ for version,v in zip(all_timbre_conds, t_strs):
             model_beat_column_pooled_taps -= np.pi
     
             # PLOT AX OF SUBJECT
-            ax_subject[sc + vc, m].plot(np.arange(2), np.arange(2), alpha=0, color='white') # this is a phantom line, for some reason there's a bug with the arrow in this polar plot so just make it transparant and length 1                      
-            ax_subject[sc + vc,m].scatter(subject_beat_column_pooled_taps, 1-randomnoise_subject, s=12, alpha=0.08, c=subject_version_color, marker='.', edgecolors='none')
-            ax_subject[sc + vc,m].arrow(0, 0.0, psi_subject, R_subject, color='firebrick', linewidth=1)
+            ax_subject[sc, m].plot(np.arange(2), np.arange(2), alpha=0, color='white') # this is a phantom line, for some reason there's a bug with the arrow in this polar plot so just make it transparant and length 1                      
+            ax_subject[sc, m].scatter(subject_beat_column_pooled_taps, 1-randomnoise_subject, s=12, alpha=0.08, c=subject_version_color, marker='.', edgecolors='none')
+            ax_subject[sc, m].arrow(0, 0.0, psi_subject, R_subject, color='firebrick', linewidth=1)
 
     
             # PLOT AX OF MODEL 
-            ax_model[sc + vc, m].plot(np.arange(2), np.arange(2), alpha=0, color='white') # this is a phantom line, for some reason there's a bug with the arrow in this polar plot so just make it transparant and length 1                      
-            ax_model[sc + vc,m].scatter(model_beat_column_pooled_taps, 1-randomnoise_model, s=12, alpha=0.05, c=model_version_color, marker='.', edgecolors='none')
-            ax_model[sc + vc,m].arrow(0, 0.0, psi_model, R_model, color='black', linewidth=1)
+            ax_model[sc, m].plot(np.arange(2), np.arange(2), alpha=0, color='white') # this is a phantom line, for some reason there's a bug with the arrow in this polar plot so just make it transparant and length 1                      
+            ax_model[sc,m].scatter(model_beat_column_pooled_taps, 1-randomnoise_model, s=12, alpha=0.05, c=model_version_color, marker='.', edgecolors='none')
+            ax_model[sc,m].arrow(0, 0.0, psi_model, R_model, color='black', linewidth=1)
 
 
             # COMBINED SUBJECT + MODEL 
-            ax_combined[sc + vc, m].plot(np.arange(2), np.arange(2), alpha=0, color='white') # this is a phantom line, for some reason there's a bug with the arrow in this polar plot so just make it transparant and length 1            
-            ax_combined[sc + vc,m].scatter(subject_beat_column_pooled_taps, 0.7-randomnoise_subject, s=12, alpha=0.05, c='blueviolet', marker='.', edgecolors='none', zorder=0)
-            ax_combined[sc + vc,m].arrow(0, 0.0, psi_subject_centered, R_subject, color='red', linewidth=0.7, zorder=2)            
-            ax_combined[sc + vc,m].scatter(model_beat_column_pooled_taps, 1-randomnoise_model, s=12, alpha=0.05, c='steelblue', marker='.', edgecolors='none', zorder=0)
-            ax_combined[sc + vc,m].arrow(0, 0.0, psi_model_centered, R_model, color='blue', linewidth=0.7, zorder=1)
+            ax_combined[sc,m].plot(np.arange(2), np.arange(2), alpha=0, color='white') # this is a phantom line, for some reason there's a bug with the arrow in this polar plot so just make it transparant and length 1            
+            ax_combined[sc,m].scatter(subject_beat_column_pooled_taps, 0.7-randomnoise_subject, s=12, alpha=0.05, c='blueviolet', marker='.', edgecolors='none', zorder=0)
+            ax_combined[sc,m].arrow(0, 0.0, psi_subject_centered, R_subject, color='red', linewidth=0.7, zorder=2)            
+            ax_combined[sc,m].scatter(model_beat_column_pooled_taps, 1-randomnoise_model, s=12, alpha=0.05, c='steelblue', marker='.', edgecolors='none', zorder=0)
+            ax_combined[sc,m].arrow(0, 0.0, psi_model_centered, R_model, color='blue', linewidth=0.7, zorder=1)
 
             ##### WRITE POOLED PHASES PER BEAT SEG TO TXT FILE TO RUN STATS IN R script 
-            model_phases_txtfile = model_dir + "/phases/" + v + '-' + sync_str + "-" + str(m) + ".txt"
+            model_phases_txtfile = model_dir + "/phases/" + '-' + sync_str + "-" + str(m) + ".txt"
             np.savetxt(model_phases_txtfile, model_beat_column_pooled_taps, delimiter=',')            
-            subject_phases_txtfile = subject_dir + "/phases/" + v + '-' + sync_str + "-" + str(m) + ".txt" 
+            subject_phases_txtfile = subject_dir + "/phases/" + '-' + sync_str + "-" + str(m) + ".txt" 
             np.savetxt(subject_phases_txtfile, subject_beat_column_pooled_taps, delimiter=',')
 
             ### write R and ang per beat to csv
@@ -1072,12 +946,13 @@ for version,v in zip(all_timbre_conds, t_strs):
             if psi_subject < 0: 
                 psi_subject += 2*np.pi
             #R_writer.writerow([sync_str, str(m), str(v), R_model, R_subject, str(np.degrees(psi_model_centered)), str(np.degrees(psi_subject_centered))])            
-            R_writer.writerow([sync_str, str(m), str(v), R_model, R_subject, str(np.degrees(psi_model)), str(np.degrees(psi_subject))])            
+            R_writer.writerow([sync_str, str(m), R_model, R_subject, str(np.degrees(psi_model)), str(np.degrees(psi_subject))])            
                 
-        sc += 1
-    vc += 4
+    sc += 1
 
 R_csv.close()
+
+#%%
 
 fig_combined.suptitle('Timbre and No Timbre Phase Coherence Per Beat Segment')
 fig_subject.suptitle('Subject Phase Coherence Per Beat Segment')
